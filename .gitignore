@@ -57,4 +57,5 @@ _build/
 # notebooks checkpoint
 *.ipynb_checkpoints
 
-test/data
+/test/data
+/test/output/
