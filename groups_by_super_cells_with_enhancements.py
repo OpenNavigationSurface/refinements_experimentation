@@ -112,6 +112,7 @@ def modify_varres_content(key):
     if "varres_metadata" in key:
         meta = fid[key]
         logger.info("- %s -> %s" % (key, meta.shape))
+        group_counter = 0
         for r in range(meta.shape[0]):
             for c in range(meta.shape[1]):
                 if meta[r][c][-1] != -1:
@@ -125,6 +126,8 @@ def modify_varres_content(key):
                     fod[tile_group].attrs["resolution_y"] = meta[r][c][4]
                     fod[tile_group].attrs["sw_corner_x"] = meta[r][c][5]
                     fod[tile_group].attrs["sw_corner_y"] = meta[r][c][6]
+                    fod[tile_group].attrs["group_id"] = group_counter  # added group_id for clustering tiles
+                    group_counter += 1
         return
 
     # convert the refinements in the input BAG to tiles for each super cell
