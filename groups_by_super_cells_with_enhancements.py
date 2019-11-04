@@ -137,14 +137,14 @@ def modify_varres_content(key):
 
         for idx, meta in valid_tiles.items():
             tile_group = bag_tiles_group + "/%d_%d" % idx
-            logger.info("- populating tile: %s" % tile_group)
+            logger.info("- populating tile: %s -> [%s]" % (tile_group, meta))
             to = meta[0]
 
             tile_elevation = tile_group + "/elevation"
-            fod.create_dataset(tile_elevation, (meta[1], meta[2]), dtype="float32")
+            fod.create_dataset(tile_elevation, (meta[2], meta[1]), dtype="float32")
             for tr in range(meta[2]):
                 for tc in range(meta[1]):
-                    fod[tile_elevation][tr, tc] = refs[to + tr * meta[1] + tc][0]
+                    fod[tile_elevation][tr, tc] = refs[to + tr * meta[2] + tc][0]
 
             tile_tracking_list = tile_group + "/tracking_list"
             fod.create_dataset(tile_tracking_list, (0, 0),
@@ -153,10 +153,10 @@ def modify_varres_content(key):
                                       'offsets': [0, 4, 8, 12, 16, 18], 'itemsize': 20})
 
             tile_uncertainty = tile_group + "/uncertainty"
-            fod.create_dataset(tile_uncertainty, (meta[1], meta[2]), dtype="float32")
+            fod.create_dataset(tile_uncertainty, (meta[2], meta[1]), dtype="float32")
             for tr in range(meta[2]):
                 for tc in range(meta[1]):
-                    fod[tile_uncertainty][tr, tc] = refs[to + tr * meta[1] + tc][1]
+                    fod[tile_uncertainty][tr, tc] = refs[to + tr * meta[2] + tc][1]
 
     # take care of the values in the VR tracking list (currently, not implemented)
     if "varres_tracking_list" in key:
