@@ -50,7 +50,7 @@ logger.info("input BAG: open")
 # open the output BAG in writing mode
 
 bag_name = os.path.basename(bag_path)
-out_path = os.path.join(test_output_folder, os.path.splitext(bag_name)[0] + "_GSC" + os.path.splitext(bag_name)[1])
+out_path = os.path.join(test_output_folder, os.path.splitext(bag_name)[0] + "_GSC_enhanced" + os.path.splitext(bag_name)[1])
 logger.info("output BAG file: %s" % out_path)
 if os.path.exists(out_path):
     os.remove(out_path)
@@ -120,8 +120,8 @@ def modify_varres_content(key):
                     valid_tiles[(r, c)] = meta[r][c]
                     tile_group = bag_tiles_group + "/%d_%d" % (r, c)
                     fod.create_group(tile_group)
-                    fod[tile_group].attrs["dimensions_x"] = meta[r][c][1]
-                    fod[tile_group].attrs["dimensions_y"] = meta[r][c][2]
+                    # fod[tile_group].attrs["dimensions_x"] = meta[r][c][1]  # redundant
+                    # fod[tile_group].attrs["dimensions_y"] = meta[r][c][2]  # redundant
                     fod[tile_group].attrs["resolution_x"] = meta[r][c][3]
                     fod[tile_group].attrs["resolution_y"] = meta[r][c][4]
                     fod[tile_group].attrs["sw_corner_x"] = meta[r][c][5]
@@ -135,6 +135,10 @@ def modify_varres_content(key):
         refs = fid[key][0]
         logger.info("- %s -> %s" % (key, refs.shape))
 
+        # retrieve tracking list to evaluate its number of elements
+        trk = fid["BAG_root/varres_tracking_list"]
+        logger.info("- %s -> %s" % (key, trk.shape))
+
         for idx, meta in valid_tiles.items():
             tile_group = bag_tiles_group + "/%d_%d" % idx
             logger.info("- populating tile: %s -> [%s]" % (tile_group, meta))
@@ -146,11 +150,12 @@ def modify_varres_content(key):
                 for tc in range(meta[1]):
                     fod[tile_elevation][tr, tc] = refs[to + tr * meta[2] + tc][0]
 
-            tile_tracking_list = tile_group + "/tracking_list"
-            fod.create_dataset(tile_tracking_list, (0, 0),
-                               dtype={'names': ['row', 'col', 'depth', 'uncertainty', 'track_code', 'list_series'],
-                                      'formats': ['<u4', '<u4', '<f4', '<f4', 'u1', '<i2'],
-                                      'offsets': [0, 4, 8, 12, 16, 18], 'itemsize': 20})
+            if trk.shape[0] != 0:
+                tile_tracking_list = tile_group + "/tracking_list"
+                fod.create_dataset(tile_tracking_list, (0, 0),
+                                   dtype={'names': ['row', 'col', 'depth', 'uncertainty', 'track_code', 'list_series'],
+                                          'formats': ['<u4', '<u4', '<f4', '<f4', 'u1', '<i2'],
+                                          'offsets': [0, 4, 8, 12, 16, 18], 'itemsize': 20})
 
             tile_uncertainty = tile_group + "/uncertainty"
             fod.create_dataset(tile_uncertainty, (meta[2], meta[1]), dtype="float32")
@@ -161,7 +166,6 @@ def modify_varres_content(key):
     # take care of the values in the VR tracking list (currently, not implemented)
     if "varres_tracking_list" in key:
         trk = fid[key]
-        logger.info("- %s -> %s" % (key, trk.shape))
         if trk.shape[0] != 0:
             logger.warning("reading of varres_tracking_list NOT implemented")
 
