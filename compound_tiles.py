@@ -39,6 +39,13 @@ if not h5py.is_hdf5(bag_path):
     raise RuntimeError("The passed BAG file is not recognized as a valid HDF5 format")
 logger.info("input BAG file: %s" % bag_path)
 
+# setup comparison parameters
+copyBaseBag = False;
+ziptype = None # To test with compression, set this to "gzip" or "lzf".
+test_suffix = "CMP"
+if ziptype != None:
+    test_suffix += "_" + ziptype
+
 # open the input BAG in reading mode (and check the presence of the BAG_root group)
 
 fid = h5py.File(bag_path, 'r')
@@ -51,7 +58,7 @@ logger.info("input BAG: open")
 # open the output BAG in writing mode
 
 bag_name = os.path.basename(bag_path)
-out_path = os.path.join(test_output_folder, os.path.splitext(bag_name)[0] + "_CMP" + os.path.splitext(bag_name)[1])
+out_path = os.path.join(test_output_folder, os.path.splitext(bag_name)[0] + "_" + test_suffix + os.path.splitext(bag_name)[1])
 logger.info("output BAG file: %s" % out_path)
 if os.path.exists(out_path):
     os.remove(out_path)
@@ -86,9 +93,11 @@ def clone_content_without_varres_items(key):
             logger.info("- %s: dataset attribute copy: %s -> %s" % (key, ka, kv))
         logger.info("- %s: dataset copy (%s)" % (key, fid[key].dtype))
 
-
-logger.info("cloning content (skipping varres* elements)")
-fid.visit(clone_content_without_varres_items)
+if copyBaseBag:
+    logger.info("cloning content (skipping varres* elements)")
+    fid.visit(clone_content_without_varres_items)
+else:
+    logger.info("skipping all source elements")
 
 #  create the BAG_tiles root-group to store the tiles for the corresponding super cells
 
@@ -238,8 +247,9 @@ def modify_varres_content(key):
                     valid_tiles[(r, c)] = meta[r][c]
                     tile_id = bag_tiles_group + "/%d_%d" % (r, c)
                     tile_meta = meta[r][c]
-                    fod.create_dataset(tile_id, (tile_meta[2], tile_meta[1]), \
-                                        dtype=([('elevation', "float32"), ('uncertainty', "float32")]))
+                    fod.create_dataset( tile_id, (tile_meta[2], tile_meta[1]), \
+                                        dtype=([('elevation', "float32"), ('uncertainty', "float32")]),
+                                        compression = ziptype)
                     fod[tile_id].attrs["res_x"] = tile_meta[3]
                     fod[tile_id].attrs["res_y"] = tile_meta[4]
                     fod[tile_id].attrs["west"] = fod["BAG_tiles"].attrs["supergrid_west"] \
@@ -266,17 +276,18 @@ def modify_varres_content(key):
             logger.info("- populating tile: %s -> [%s]" % (tile_id, meta))
             to = meta[0]
 
-            # Elevation and uncertainty
+            # Elevation and uncertainty are in the same order as in the original refinements list.
             for tr in range(meta[2]):
                 for tc in range(meta[1]):
                     fod[tile_id][tr, tc] = refs[to + tr * meta[2] + tc]
 
             if trk.shape[0] != 0:
                 tile_tracking_list = tile_id + "_tracking_list" # Todo: Group this?
-                fod.create_dataset(tile_tracking_list, (0, 0),
-                                   dtype={'names': ['row', 'col', 'depth', 'uncertainty', 'track_code', 'list_series'],
+                fod.create_dataset( tile_tracking_list, (0, 0),
+                                    dtype={'names': ['row', 'col', 'depth', 'uncertainty', 'track_code', 'list_series'],
                                           'formats': ['<u4', '<u4', '<f4', '<f4', 'u1', '<i2'],
-                                          'offsets': [0, 4, 8, 12, 16, 18], 'itemsize': 20})
+                                          'offsets': [0, 4, 8, 12, 16, 18], 'itemsize': 20},
+                                    compression = ziptype)
             # Uncertainty
             for tr in range(meta[2]):
                 for tc in range(meta[1]):
