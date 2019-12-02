@@ -42,7 +42,7 @@ logger.info("input BAG file: %s" % bag_path)
 # setup comparison parameters
 copyBaseBag = False;
 ziptype = None # To test with compression, set this to "gzip" or "lzf".
-test_suffix = "ATT"
+test_suffix = "DUP"
 if ziptype != None:
     test_suffix += "_" + ziptype
 
@@ -240,26 +240,35 @@ def modify_varres_content(key):
         meta = fid[key]
         logger.info("- %s -> %s" % (key, meta.shape))
         group_counter = 0
-        fod.create_dataset(bag_tiles_group + "/res_x"   , meta.shape, dtype="float32", compression=ziptype)
-        fod.create_dataset(bag_tiles_group + "/res_y"   , meta.shape, dtype="float32", compression=ziptype)
-        fod.create_dataset(bag_tiles_group + "/west"    , meta.shape, dtype="float32", compression=ziptype)
-        fod.create_dataset(bag_tiles_group + "/south"   , meta.shape, dtype="float32", compression=ziptype)
-        fod.create_dataset(bag_tiles_group + "/group_id", meta.shape, dtype="int", compression=ziptype)
+        elevation_group = bag_tiles_group + "/elevation"
+        fod.create_group(elevation_group)
+        uncert_group = bag_tiles_group + "/uncertainty"
+        fod.create_group(uncert_group)
         for r in range(meta.shape[0]):
             for c in range(meta.shape[1]):
                 if meta[r][c][-1] != -1:
                     logger.info("- valid tile (%s, %s): %s" % (r, c, meta[r][c]))
                     valid_tiles[(r, c)] = meta[r][c]
-                    
-                    fod[bag_tiles_group + "/res_x"][r,c] = meta[r][c][3]
-                    fod[bag_tiles_group + "/res_y"][r,c] = meta[r][c][4]
-                    fod[bag_tiles_group + "/west"][r,c] = fod["BAG_tiles"].attrs["supergrid_west"] \
+                    tile_id = "/%d_%d" % (r, c)
+                    tile_meta = meta[r][c]
+                    tile_elev = elevation_group + tile_id
+                    tile_uncert = uncert_group + tile_id
+                    fod.create_dataset(tile_uncert, (tile_meta[2], tile_meta[1]), dtype = "float32", compression=ziptype)
+                    fod.create_dataset(tile_elev, (tile_meta[2], tile_meta[1]), dtype = "float32", compression=ziptype)
+                    fod[tile_elev].attrs["res_x"] = tile_meta[3]
+                    fod[tile_elev].attrs["res_y"] = tile_meta[4]
+                    fod[tile_elev].attrs["west"] = fod["BAG_tiles"].attrs["supergrid_west"] \
                                                     + c * fod["BAG_tiles"].attrs["supergrid_res_x"] \
-                                                    + meta[r][c][5]
-                    fod[bag_tiles_group + "/south"][r,c] = fod["BAG_tiles"].attrs["supergrid_south"] \
+                                                    + tile_meta[5]
+                    fod[tile_elev].attrs["south"] = fod["BAG_tiles"].attrs["supergrid_south"] \
                                                      + r * fod["BAG_tiles"].attrs["supergrid_res_y"] \
-                                                     + meta[r][c][6]
-                    fod[bag_tiles_group + "/group_id"][r,c] = group_counter  # added group_id for clustering tiles
+                                                     + tile_meta[6]
+                    fod[tile_elev].attrs["group_id"] = group_counter  # added group_id for clustering tiles
+                    fod[tile_uncert].attrs["res_x"] = fod[tile_elev].attrs["res_x"] # duplicate
+                    fod[tile_uncert].attrs["res_y"] = fod[tile_elev].attrs["res_y"] # duplicate
+                    fod[tile_uncert].attrs["west"] = fod[tile_elev].attrs["west"] # duplicate
+                    fod[tile_uncert].attrs["south"] = fod[tile_elev].attrs["south"] # duplicate
+                    fod[tile_uncert].attrs["group_id"] = fod[tile_elev].attrs["group_id"] # duplicate
                     group_counter += 1
         return
 
@@ -274,9 +283,7 @@ def modify_varres_content(key):
         
         # create the attribute groups
         elevation_group = bag_tiles_group + "/elevation"
-        fod.create_group(elevation_group)
         uncert_group = bag_tiles_group + "/uncertainty"
-        fod.create_group(uncert_group)
         tracking_group = bag_tiles_group + "/tracking_list"
         if trk.shape[0] != 0:
             fod.create_group(tracking_group)
@@ -287,7 +294,6 @@ def modify_varres_content(key):
             to = meta[0]
 
             tile_elevation = elevation_group + tile_id
-            fod.create_dataset(tile_elevation, (meta[2], meta[1]), dtype="float32", compression=ziptype)
             for tr in range(meta[2]):
                 for tc in range(meta[1]):
                     fod[tile_elevation][tr, tc] = refs[to + tr * meta[2] + tc][0]
@@ -301,7 +307,6 @@ def modify_varres_content(key):
                                     compression=ziptype)
 
             tile_uncertainty = uncert_group + tile_id
-            fod.create_dataset(tile_uncertainty, (meta[2], meta[1]), dtype="float32", compression=ziptype)
             for tr in range(meta[2]):
                 for tc in range(meta[1]):
                     fod[tile_uncertainty][tr, tc] = refs[to + tr * meta[2] + tc][1]
