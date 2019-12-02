@@ -42,7 +42,7 @@ logger.info("input BAG file: %s" % bag_path)
 # setup comparison parameters
 copyBaseBag = False;
 ziptype = None # To test with compression, set this to "gzip" or "lzf".
-test_suffix = "CMP"
+test_suffix = "SHP"
 if ziptype != None:
     test_suffix += "_" + ziptype
 
@@ -233,6 +233,8 @@ def modify_varres_content(key):
     if "varres" not in key:
         logger.info("- %s: skip" % (key,))
         return
+        
+    numatts = 2 # Elevation, Uncertainty
 
     # retrieve and store the metadata relative to the VR refinements
     # + create a tile for each super cell with VR refinements
@@ -247,8 +249,8 @@ def modify_varres_content(key):
                     valid_tiles[(r, c)] = meta[r][c]
                     tile_id = bag_tiles_group + "/%d_%d" % (r, c)
                     tile_meta = meta[r][c]
-                    fod.create_dataset( tile_id, (tile_meta[2], tile_meta[1]), \
-                                        dtype=([('elevation', "float32"), ('uncertainty', "float32")]),
+                    fod.create_dataset( tile_id, (tile_meta[2], tile_meta[1], numatts),
+                                        dtype="float32",
                                         compression = ziptype)
                     fod[tile_id].attrs["res_x"] = tile_meta[3]
                     fod[tile_id].attrs["res_y"] = tile_meta[4]
@@ -279,7 +281,8 @@ def modify_varres_content(key):
             # Elevation and uncertainty are in the same order as in the original refinements list.
             for tr in range(meta[2]):
                 for tc in range(meta[1]):
-                    fod[tile_id][tr, tc] = refs[to + tr * meta[2] + tc]
+                    for ta in range(numatts):
+                        fod[tile_id][tr, tc, ta] = refs[to + tr * meta[2] + tc][ta]
 
             if trk.shape[0] != 0:
                 tile_tracking_list = tile_id + "_tracking_list" # Todo: Group this?

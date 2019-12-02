@@ -42,7 +42,7 @@ logger.info("input BAG file: %s" % bag_path)
 # setup comparison parameters
 copyBaseBag = False;
 ziptype = None # To test with compression, set this to "gzip" or "lzf".
-test_suffix = "CMP"
+test_suffix = "DUP"
 if ziptype != None:
     test_suffix += "_" + ziptype
 
@@ -240,25 +240,35 @@ def modify_varres_content(key):
         meta = fid[key]
         logger.info("- %s -> %s" % (key, meta.shape))
         group_counter = 0
+        elevation_group = bag_tiles_group + "/elevation"
+        fod.create_group(elevation_group)
+        uncert_group = bag_tiles_group + "/uncertainty"
+        fod.create_group(uncert_group)
         for r in range(meta.shape[0]):
             for c in range(meta.shape[1]):
                 if meta[r][c][-1] != -1:
                     logger.info("- valid tile (%s, %s): %s" % (r, c, meta[r][c]))
                     valid_tiles[(r, c)] = meta[r][c]
-                    tile_id = bag_tiles_group + "/%d_%d" % (r, c)
+                    tile_id = "/%d_%d" % (r, c)
                     tile_meta = meta[r][c]
-                    fod.create_dataset( tile_id, (tile_meta[2], tile_meta[1]), \
-                                        dtype=([('elevation', "float32"), ('uncertainty', "float32")]),
-                                        compression = ziptype)
-                    fod[tile_id].attrs["res_x"] = tile_meta[3]
-                    fod[tile_id].attrs["res_y"] = tile_meta[4]
-                    fod[tile_id].attrs["west"] = fod["BAG_tiles"].attrs["supergrid_west"] \
+                    tile_elev = elevation_group + tile_id
+                    tile_uncert = uncert_group + tile_id
+                    fod.create_dataset(tile_uncert, (tile_meta[2], tile_meta[1]), dtype = "float32", compression=ziptype)
+                    fod.create_dataset(tile_elev, (tile_meta[2], tile_meta[1]), dtype = "float32", compression=ziptype)
+                    fod[tile_elev].attrs["res_x"] = tile_meta[3]
+                    fod[tile_elev].attrs["res_y"] = tile_meta[4]
+                    fod[tile_elev].attrs["west"] = fod["BAG_tiles"].attrs["supergrid_west"] \
                                                     + c * fod["BAG_tiles"].attrs["supergrid_res_x"] \
                                                     + tile_meta[5]
-                    fod[tile_id].attrs["south"] = fod["BAG_tiles"].attrs["supergrid_south"] \
+                    fod[tile_elev].attrs["south"] = fod["BAG_tiles"].attrs["supergrid_south"] \
                                                      + r * fod["BAG_tiles"].attrs["supergrid_res_y"] \
                                                      + tile_meta[6]
-                    fod[tile_id].attrs["group_id"] = group_counter  # added group_id for clustering tiles
+                    fod[tile_elev].attrs["group_id"] = group_counter  # added group_id for clustering tiles
+                    fod[tile_uncert].attrs["res_x"] = fod[tile_elev].attrs["res_x"] # duplicate
+                    fod[tile_uncert].attrs["res_y"] = fod[tile_elev].attrs["res_y"] # duplicate
+                    fod[tile_uncert].attrs["west"] = fod[tile_elev].attrs["west"] # duplicate
+                    fod[tile_uncert].attrs["south"] = fod[tile_elev].attrs["south"] # duplicate
+                    fod[tile_uncert].attrs["group_id"] = fod[tile_elev].attrs["group_id"] # duplicate
                     group_counter += 1
         return
 
@@ -270,24 +280,36 @@ def modify_varres_content(key):
         # retrieve tracking list to evaluate its number of elements
         trk = fid["BAG_root/varres_tracking_list"]
         logger.info("- %s -> %s" % (key, trk.shape))
+        
+        # create the attribute groups
+        elevation_group = bag_tiles_group + "/elevation"
+        uncert_group = bag_tiles_group + "/uncertainty"
+        tracking_group = bag_tiles_group + "/tracking_list"
+        if trk.shape[0] != 0:
+            fod.create_group(tracking_group)
 
         for idx, meta in valid_tiles.items():
-            tile_id = bag_tiles_group + "/%d_%d" % idx
-            logger.info("- populating tile: %s -> [%s]" % (tile_id, meta))
+            tile_id = "/%d_%d" % idx
+            logger.info("- populating tile: %s -> [%s]" % (bag_tiles_group + tile_id, meta))
             to = meta[0]
 
-            # Elevation and uncertainty are in the same order as in the original refinements list.
+            tile_elevation = elevation_group + tile_id
             for tr in range(meta[2]):
                 for tc in range(meta[1]):
-                    fod[tile_id][tr, tc] = refs[to + tr * meta[2] + tc]
+                    fod[tile_elevation][tr, tc] = refs[to + tr * meta[2] + tc][0]
 
             if trk.shape[0] != 0:
-                tile_tracking_list = tile_id + "_tracking_list" # Todo: Group this?
+                tile_tracking_list = tracking_group + tile_id
                 fod.create_dataset( tile_tracking_list, (0, 0),
                                     dtype={'names': ['row', 'col', 'depth', 'uncertainty', 'track_code', 'list_series'],
                                           'formats': ['<u4', '<u4', '<f4', '<f4', 'u1', '<i2'],
                                           'offsets': [0, 4, 8, 12, 16, 18], 'itemsize': 20},
-                                    compression = ziptype)
+                                    compression=ziptype)
+
+            tile_uncertainty = uncert_group + tile_id
+            for tr in range(meta[2]):
+                for tc in range(meta[1]):
+                    fod[tile_uncertainty][tr, tc] = refs[to + tr * meta[2] + tc][1]
 
     # take care of the values in the VR tracking list (currently, not implemented)
     if "varres_tracking_list" in key:
